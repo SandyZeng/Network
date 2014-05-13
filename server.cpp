@@ -1,4 +1,6 @@
 #include<unistd.h>
+#include<errno.h>
+#include<fcntl.h>
 #include<sys/types.h>
 #include<stdio.h>
 #include<stdlib.h>
@@ -16,6 +18,8 @@ struct server_t{
 server_t server;
 
 int conncount;
+
+int set_nonblock(int fd);
 
 int init_server(int port, int backlog){
 	printf("port:%d backlog:%d\n",port,backlog);
@@ -152,21 +156,157 @@ int run_server2(){
 			if(fd[i]<0)continue;
 			if(FD_ISSET(fd[i],&rfds)){    //recv data in block mode
 
-				char buf[1024];
+				char buf[1000000];
 				if(i==0){             //stdin
 					fgets(buf, 1024, stdin);
 					fputs(buf,stdout);
 					continue;
 				}
-				ret = recv(fd[i],buf,1024,0);  
+				ret = recv(fd[i],buf,1000000,0);
+				printf("recv fd=%d,length=%d\n",fd[i],ret);  
 				if(ret == 0){
 					close(fd[i]);
 					printf("close socket:%d\n",fd[i]);
 					fd[i] = -1;
 					continue;
 				} 
-				buf[ret] = '\0';
-				printf("recv socket:%d %s\n",fd[i],buf);
+			//	buf[ret] = '\0';
+			//	printf("recv socket:%d %s\n",fd[i],buf);
+			}
+		//	else{      
+		//	}
+		}		
+	
+	}
+}
+//single thread, asynchronous server, using select, non-block I/O
+int run_server3(){
+	printf("server using select NON-Block I/O ....\n");
+	int fd[MAX_CONNECTIONS];
+	fd_set rfds, wfds;
+	struct timeval tv;
+	int ret;
+	
+        	
+	memset(&fd, -1, MAX_CONNECTIONS);
+	
+	fd[0] = 0;
+	fd[1] = 1;
+	fd[2] = server.listenfd;
+	
+	int max_idx = 3;
+	int maxfd = server.listenfd;
+	while(1){
+	//must re-initilize fd_set everytime.
+		FD_ZERO(&rfds);
+		FD_SET(STDIN_FILENO,&rfds);
+		FD_SET(server.listenfd, &rfds);
+		FD_ZERO(&wfds);
+
+		// add conncted sockets
+		printf("current connection:%d max_idx:%d\n",conncount,max_idx);
+		for(int i = 3; i < max_idx; i++){
+//			printf("i:%d conn fd:%d\n",i,fd[i]);
+			if(fd[i] >0){
+				FD_SET(fd[i], &rfds);
+			}
+		}
+	
+		tv.tv_sec = 5;
+		tv.tv_usec = 0;
+	
+		ret = select(maxfd+1, &rfds, &wfds, NULL,&tv);
+		if(ret < 0){
+			perror("select");
+			exit(1);
+		}
+		if(ret == 0){
+			printf("time out\n");
+			continue;
+		}
+		//a new connection
+		if(FD_ISSET(server.listenfd,&rfds)){
+			int newfd = accept(server.listenfd,(struct sockaddr*)NULL, NULL);
+			if(newfd < 0){
+				perror("accept");
+				continue;
+			}
+			
+			printf("accept %d connections\n",conncount++);
+			//conncount++;
+			// add the connection to fd queue
+
+			int i = 3;
+			if(max_idx < MAX_CONNECTIONS){
+				fd[max_idx++] = newfd;
+			}
+			else{
+				for(; i<max_idx; i++){
+					if(fd[i] == -1){
+						fd[i] = newfd;
+						break;
+					}
+				}
+				if(i == max_idx){
+					send(newfd, "busy",sizeof("busy"),0);
+					close(newfd);
+					continue;
+				}
+			}
+			// set non-block socket
+			set_nonblock(newfd);		
+			char *msg = "wherecome to server...";
+			int nLeft = strlen(msg);
+			while(nLeft > 0){
+				int nSend = send(newfd, msg, nLeft,0);
+				if(nSend < 0){
+					if(errno != EAGAIN){
+						perror("send");
+						close(newfd);
+						printf("error read, close %d\n",newfd);
+						fd[i] = -1;
+						continue;
+					}
+				}
+				else{
+					nLeft -= nSend;
+				}
+			}
+			maxfd = newfd > maxfd?newfd:maxfd;
+			continue;
+		}
+		
+		//handle each connection
+		for(int i=0; i < max_idx;i++){
+//			printf("read event...\n");
+			if(fd[i]<0)continue;
+			if(FD_ISSET(fd[i],&rfds)){    //recv data in block mode
+
+				char buf[1000000];
+				if(i==0){             //stdin
+					fgets(buf, 1024, stdin);
+					fputs(buf,stdout);
+					continue;
+				}
+				ret = recv(fd[i],buf,1000000,0);  
+				printf("recv fd=%d,length=%d:\n",fd[i],ret);
+				if(ret == 0){
+					close(fd[i]);
+					printf("close socket:%d\n",fd[i]);
+					fd[i] = -1;
+					continue;
+				} 
+				else if(ret < 0){
+					if(errno != EAGAIN){
+						perror("recv");
+						close(fd[i]);
+						printf("recv error, close %d\n",fd[i]);
+						fd[i] = -1;
+						continue;
+					}
+				}
+			//	buf[ret] = '\0';
+			//	printf("recv socket:%d %s\n",fd[i],buf);
 			}
 		//	else{      
 		//	}
@@ -175,6 +315,19 @@ int run_server2(){
 	}
 }
 
+int set_nonblock(int fd){
+	int flags = fcntl(fd, F_GETFL, 0);
+	if(flags < 0){
+		perror("fcntl nonblock");
+		return -1;
+	}
+	flags |= O_NONBLOCK;
+	if(fcntl(fd, F_SETFL,flags)<0){
+		perror("setblock");
+		return -1;
+	}
+	return 0;
+}
 int start_server(int port, int backlog){
 	init_server(port, backlog);
 	run_server2();

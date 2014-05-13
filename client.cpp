@@ -8,7 +8,7 @@
 #include<arpa/inet.h>
 #include<pthread.h>
 
-#define THREAD_NUM 10000
+#define THREAD_NUM 1
 
 struct sockaddr_in servaddr;
 static int threadcount;
@@ -41,9 +41,16 @@ void *thread_conn(void *data){
 	}
 	else{
 		printf("recv:%s\n",buf);
-		char msg[1024];
-		sprintf(msg, "hello, pid:%d threadID:%lu",getpid(),(unsigned long)pthread_self());
-		send(sockfd, msg, sizeof(msg),0);
+		char msg[1000000];
+		for(int i = 0; i< 1000000; i++){
+			msg[i] = '0'+i%26;
+		}
+		printf("send msg %s\n",msg);
+//		sprintf(msg, "hello, pid:%d threadID:%lu",getpid(),(unsigned long)pthread_self());
+		int n = send(sockfd, msg, strlen(msg),0);
+		if( n < 0){
+			perror("send");
+		}
 //		sleep(3);
 		close(sockfd);
 	}
