@@ -8,8 +8,10 @@
 #include<signal.h>
 #include<string.h>
 #include<arpa/inet.h>
+#include<sys/epoll.h>
 
 #define MAX_CONNECTIONS 10000
+#define MAX_EVENT 100
 struct server_t{
 	int listenfd;
 	struct sockaddr_in addr;
@@ -315,6 +317,67 @@ int run_server3(){
 	}
 }
 
+// a server use epoll 
+int run_server4(){
+	printf("server using epoll NON-Block I/O ....\n");
+	struct epoll_event ev, events[MAX_EVENT];
+	int epollfd = epoll_create(MAX_EVENT);
+	if(epollfd < 0){
+		perror("epoll create");
+		exit(1);
+	}
+
+	ev.events = EPOLLIN;
+	ev.data.fd = server.listenfd;
+	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, server.listenfd, &ev)<0){
+		perror("epoll_ctl");
+		exit(1);
+	}
+
+	int nfds;
+	while(1){
+		nfds = epoll_wait(epollfd, events, MAX_EVENT,3000);
+		if(nfds < 0){
+			perror("epoll_wait");
+			exit(1);
+		}
+		for(int i = 0; i<nfds;i++){
+			if(events[i].events != EPOLLIN)continue;
+			if(events[i].data.fd == server.listenfd){
+				int newfd = accept(server.listenfd,NULL,NULL);
+				if(newfd < 0){
+					perror("accept");
+					continue;
+				}
+				set_nonblock(newfd);
+				ev.events = EPOLLIN | EPOLLET;
+				ev.data.fd = newfd;
+				if(epoll_ctl(epollfd,EPOLL_CTL_ADD, newfd, &ev)<0){
+					perror("epoll_ctl in loop");
+					close(newfd);
+					continue;
+				}
+				char *msg = "welcome to server";
+				send(newfd, msg,strlen(msg),0);
+			}
+			else{
+				char buf[1024];
+				int n;
+				while((n = recv(events[i].data.fd, buf, 1024,0))!=0){
+				printf("recv:fd=%d, length=%d\n",events[i].data.fd,n);				}
+				if(n == 0){
+					printf("close socket %d\n",events[i].data.fd);
+					close(events[i].data.fd);
+					continue;
+				}
+				
+		
+			}
+		}
+	}
+	
+}
+
 int set_nonblock(int fd){
 	int flags = fcntl(fd, F_GETFL, 0);
 	if(flags < 0){
@@ -330,7 +393,7 @@ int set_nonblock(int fd){
 }
 int start_server(int port, int backlog){
 	init_server(port, backlog);
-	run_server2();
+	run_server4();
 }
 
 void close_server(int signo){
