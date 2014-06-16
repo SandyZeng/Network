@@ -1,5 +1,6 @@
 #include<unistd.h>
 #include<errno.h>
+#include<sys/stat.h>
 #include<fcntl.h>
 #include<sys/types.h>
 #include<stdio.h>
@@ -9,6 +10,7 @@
 #include<string.h>
 #include<arpa/inet.h>
 #include<sys/epoll.h>
+#include<sys/sendfile.h>
 
 #define MAX_CONNECTIONS 10000
 #define MAX_EVENT 100
@@ -51,6 +53,26 @@ int init_server(int port, int backlog){
 	}
 	printf("listen on port %d\n",port);
 	return 0;
+}
+//file server using sendfile, zero copy
+int run_file_server(){
+	conncount = 0;	
+	int fd = open("test.txt",O_RDONLY);
+	if(fd<0){
+		perror("open test.txt");
+		exit(0);
+	}
+	struct stat stat_buf;
+	fstat(fd, &stat_buf);
+	printf("file server started for accepting connections....\n");
+	while(1){
+		int connfd = accept(server.listenfd,(struct sockaddr*)NULL, NULL);
+		sendfile(connfd, fd, NULL, stat_buf.st_size);
+		 conncount++;
+		 printf("accept a connection\n");
+		close(connfd);
+	}
+	close(fd);
 }
 //iterate server
 int run_server1(){
@@ -393,7 +415,8 @@ int set_nonblock(int fd){
 }
 int start_server(int port, int backlog){
 	init_server(port, backlog);
-	run_server4();
+//	run_server4();
+	run_file_server();
 }
 
 void close_server(int signo){
