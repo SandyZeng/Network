@@ -5,7 +5,7 @@ using namespace std;
 #include"MyHash.h"
 
 int main(){
-	LRUCache<int>* cache = new LRUCache<int>(new MyHash());
+	Cache<int>* cache = new LRUCache<int>(new MyHash());
 	cache->set("hello", 1);
 	cout<<"get(hello):"<<cache->get("hello")<<endl;
 	cache->set("world", 2);
