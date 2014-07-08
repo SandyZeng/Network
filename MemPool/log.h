@@ -5,6 +5,7 @@
 #include<iostream>
 using namespace std;
 #include<stdlib.h>
+#include<fcntl.h>
 
 void log(const string &str){
 	cout<<str<<endl;	
