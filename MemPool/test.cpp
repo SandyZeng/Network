@@ -9,7 +9,7 @@ int main(){
 	pool.stats();
 	
 	//allocation space for items
-	for(int i = 0; i < 20; i++){
+	for(int i = 0; i < 1000; i++){
 		int size = rand()%200;
 		cout<<"item "<<i+1<<" size:"<<size<<endl;
 		pool.item_alloc(size);

@@ -74,7 +74,7 @@ int MemPool::grow_slab_list(int id){
 	Slabclass* p = &slabclass[id];
 	if(p->slabs_size == p->list_size){ //need grow the list size
 		int newsize = p->list_size==0?16:p->list_size<<1;
-		void* newlist = realloc(p->slab_list, newsize);
+		void* newlist = realloc(p->slab_list, newsize*sizeof(void*));
 		if(newlist==NULL)
 			return -1;
 		p->list_size = newsize;
