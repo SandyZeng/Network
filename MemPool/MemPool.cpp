@@ -35,7 +35,7 @@ int MemPool::init_pool(int class_num,int min_chunk, int size, float _factor){
 }
 
 int MemPool::free_pool(){
-	for(int i = 0; i < slablass_num; i++){
+	for(int i = 0; i < slabclass_num; i++){
 		free(slabclass[i].slab_list);
 	}
 	free(mem_base);
@@ -78,7 +78,7 @@ int MemPool::grow_slab_list(int id){
 		if(newlist==NULL)
 			return -1;
 		p->list_size = newsize;
-		p->slab_list = newlist;
+		p->slab_list = (void**)newlist;
 	}
 	return 0;
 }
@@ -89,8 +89,8 @@ void MemPool::slab_to_slots(char* ptr, int id){
 	for(int i = 0; i < p->chunk_num; i++){
 	  //link the slots to double-linked list
 		Item* item = (Item*)ptr;   
-		item->next = p->slots;
-		if(p->slots)p->slots->pre = item;
+		item->next = (Item*)p->slots;
+		if(item->next)item->next->pre = item;
 		
 		p->slots = item;
 		item->pre = NULL;
@@ -113,12 +113,12 @@ Item* MemPool::item_alloc(int size){
 	Item* item = NULL;
 	//find proper slabclass
 	int i = 0;
-	while(slabclass[i++].chunk_size<size);
+	while(i<slabclass_num&&slabclass[i++].chunk_size<size);
 	
 	//(1)find slots if not next
 	//(2)new a slab for the class if not
 	//(3)perform LRU to replace
-	Slabclass*p = &slabclass[i];	
+	Slabclass*p = &slabclass[--i];	
 	int ret;
 	if(p->slots_num==0){
 		//perform (2)
@@ -134,8 +134,8 @@ Item* MemPool::item_alloc(int size){
 	if(p->slots_num != 0){
 		//perform (1)
 		item = (Item*)p->slots;
-		p->slots = p->slots->next;
-		if(p->slots)p->slots->pre = NULL;
+		p->slots = item->next;
+		if(item->next)item->next->pre = NULL;
 		p->slots_num--;
 	}
 
@@ -160,10 +160,10 @@ void MemPool::stats(){
 	sprintf(buf, "slab size:%d",SLAB_SIZE);
 	log(buf);
 
-	log("class| chunk_size| chunk_num| slab_size");
+	log("class| chunk_size| chunk_num| slab_size|slots_num");
 	for(int i = 0; i < slabclass_num; i++){
 		char buffer[256];
-		sprintf(buffer, "%d\t%d\t\t%d\t%d",i,slabclass[i].chunk_size,slabclass[i].chunk_num,slabclass[i].slabs_size);
+		sprintf(buffer, "%d\t%d\t\t%d\t%d\t%d",i,slabclass[i].chunk_size,slabclass[i].chunk_num,slabclass[i].slabs_size,slabclass[i].slots_num);
 		log(buffer);
 	}
 }

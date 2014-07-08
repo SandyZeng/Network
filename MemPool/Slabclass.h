@@ -1,5 +1,6 @@
 #ifndef _SLABCLASS_H
 #define _SLABCLASS_H
+#include<string>
 
 class Item{
    public:
